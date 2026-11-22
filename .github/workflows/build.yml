@@ -263,7 +263,7 @@ jobs:
               print('Parche aplicadas correcciones de Uint8List en lib/main.dart')
           "
 
-      - name: 5b. Neutralizar dependencia dbus (AGPL) con Python
+      - name: 5b. Limpiar cualquier referencia inválida a dbus en pubspec.yaml
         shell: bash
         run: |
           python3 - <<'PY'
@@ -275,21 +275,11 @@ jobs:
                   text = f.read()
 
               text = re.sub(r'(?m)^[ \t]*dbus:[^\n]*\n', '', text)
-              override_entry = '  dbus:\n    hosted: none\n    version: any\n'
-
-              if 'dependency_overrides:' not in text:
-                  text = text.rstrip() + '\n\ndependency_overrides:\n' + override_entry
-              elif 'dbus:' not in text.split('dependency_overrides:', 1)[1]:
-                  text = re.sub(
-                      r'(?m)^dependency_overrides:\s*\n',
-                      'dependency_overrides:\n' + override_entry,
-                      text,
-                      count=1,
-                  )
+              text = re.sub(r'(?ms)^  dbus:\s*\n(?:    [^\n]*\n)+', '', text)
 
               with open(pubspec_path, 'w', encoding='utf-8') as f:
                   f.write(text)
-              print('Neutralizado dbus en pubspec.yaml.')
+              print('Limpiado dbus de pubspec.yaml.')
           PY
 
       - run: flutter pub get
