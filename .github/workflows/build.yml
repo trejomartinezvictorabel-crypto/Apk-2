@@ -163,6 +163,37 @@ jobs:
                       f.write(manifest)
           "
 
+      - name: 3a2. Actualizar AGP a 8.3.2 para androidx.webkit:webkit:1.14.0 con Python
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os, re
+
+          candidates = [
+              'android/settings.gradle',
+              'android/settings.gradle.kts',
+              'android/build.gradle',
+              'android/build.gradle.kts',
+          ]
+          for path in candidates:
+              if not os.path.exists(path):
+                  continue
+              txt = open(path, encoding='utf-8').read()
+              new_txt = re.sub(
+                  r'(com\.android\.application[\"\']?\s*(?:version\s*[\"\']|:))\d+\.\d+\.\d+',
+                  r'\g<1>8.3.2',
+                  txt,
+              )
+              new_txt = re.sub(
+                  r'(com\.android\.tools\.build:gradle:)\d+\.\d+\.\d+',
+                  r'\g<1>8.3.2',
+                  new_txt,
+              )
+              if new_txt != txt:
+                  open(path, 'w', encoding='utf-8').write(new_txt)
+                  print(f'Actualizado AGP a 8.3.2 en {path}')
+          PY
+
       - name: 3b. Descomprimir archivos.zip (manifiesto, íconos, política y validadores)
         shell: bash
         run: |
