@@ -263,7 +263,54 @@ jobs:
               print('Parche aplicadas correcciones de Uint8List en lib/main.dart')
           "
 
+      - name: 5b. Neutralizar dependencia dbus (AGPL) con Python
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os, re
+
+          pubspec_path = 'pubspec.yaml'
+          if os.path.exists(pubspec_path):
+              with open(pubspec_path, 'r', encoding='utf-8') as f:
+                  text = f.read()
+
+              text = re.sub(r'(?m)^[ \t]*dbus:[^\n]*\n', '', text)
+              override_entry = '  dbus:\n    hosted: none\n    version: any\n'
+
+              if 'dependency_overrides:' not in text:
+                  text = text.rstrip() + '\n\ndependency_overrides:\n' + override_entry
+              elif 'dbus:' not in text.split('dependency_overrides:', 1)[1]:
+                  text = re.sub(
+                      r'(?m)^dependency_overrides:\s*\n',
+                      'dependency_overrides:\n' + override_entry,
+                      text,
+                      count=1,
+                  )
+
+              with open(pubspec_path, 'w', encoding='utf-8') as f:
+                  f.write(text)
+              print('Neutralizado dbus en pubspec.yaml.')
+          PY
+
       - run: flutter pub get
+
+      - name: 5c. Filtrar dbus de package_config.json si persiste
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os
+
+          cfg_path = '.dart_tool/package_config.json'
+          if os.path.exists(cfg_path):
+              with open(cfg_path, 'r', encoding='utf-8') as f:
+                  cfg = json.load(f)
+              before = len(cfg.get('packages', []))
+              cfg['packages'] = [p for p in cfg.get('packages', []) if p.get('name') != 'dbus']
+              if len(cfg['packages']) != before:
+                  with open(cfg_path, 'w', encoding='utf-8') as f:
+                      json.dump(cfg, f, indent=2)
+                  print('Eliminado dbus de .dart_tool/package_config.json.')
+          PY
 
       - name: 6. Validar licencias de las dependencias (que ninguna obligue a abrir tu código)
         shell: bash
