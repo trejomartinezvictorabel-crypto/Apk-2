@@ -2,8 +2,8 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main, master ]
-  workflow_dispatch:
+    branches: [ main, master ]   # se dispara solo al subir archivos (archivos.zip, workflow, scripts...)
+  workflow_dispatch:             # y también a mano desde Actions -> Run workflow
 
 jobs:
   build:
@@ -35,7 +35,7 @@ jobs:
               print('¡Modelo descargado y colocado en assets/models/ con éxito!')
 
           pubspec_content = '''name: navegacion_offline_mx
-          description: Navegación multimodal offline para México.
+          description: Navegación multimodal offline para todo el mundo.
           publish_to: \"none\"
           version: 1.0.0+1
 
@@ -58,6 +58,9 @@ jobs:
             wakelock_plus: ^1.2.8
             flutter_compass: ^0.8.1
             webview_flutter: ^4.10.0
+            url_launcher: ^6.3.0
+            dartssh2: ^2.9.0
+            flutter_local_notifications: ^17.2.4
 
           dev_dependencies:
             flutter_test:
@@ -246,6 +249,24 @@ jobs:
               print('Firma fija agregada a build.gradle')
           PY
 
+      - name: 4a. Validar estructura, carpetas y rutas ANTES de reparar y compilar
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os, sys
+          obligatorios = [
+              'lib/main.dart', 'lib/traducciones.dart', 'lib/auditoria.dart', 'lib/mantenimiento.dart',
+              'lib/compartir.dart', 'lib/script_autoreparar.dart', 'scripts/autoreparar_app.py',
+              'scripts/validar_proyecto.py', 'scripts/validar_licencias.py',
+              'android/app/ci-keystore.p12', 'android/app/src/main/AndroidManifest.xml', 'pubspec.yaml',
+          ]
+          falta = [r for r in obligatorios if not os.path.exists(r)]
+          for r in obligatorios:
+              print(('OK     ' if r not in falta else 'FALTA  ') + r)
+          if falta:
+              sys.exit('ERROR: faltan archivos del proyecto (suben dentro de archivos.zip): ' + ', '.join(falta))
+          PY
+
       - name: 4. Parchear namespace y manifiesto de vosk_flutter
         run: |
           python3 -c "
@@ -312,6 +333,23 @@ jobs:
                   f.write(text)
               print('Limpiado dbus de pubspec.yaml.')
           PY
+
+      - name: 5c. Autoreparación (aplica lo pendiente del reporte del teléfono y deja todo listo para Android 16)
+        shell: bash
+        run: |
+          # El reporte que guarda la app en Descargas (reporte_autoreparacion.json) se usa solo si lo subes al repo,
+          # ya sea en la raíz o en scripts/ (también vale dentro de archivos.zip).
+          REP=""
+          for f in scripts/reporte_autoreparacion.json reporte_autoreparacion.json; do
+            if [ -f "$f" ]; then REP="$f"; break; fi
+          done
+          if [ -n "$REP" ]; then
+            echo "Usando el reporte del teléfono: $REP"
+            python3 scripts/autoreparar_app.py --reporte "$REP"
+          else
+            python3 scripts/autoreparar_app.py
+          fi
+          # El resultado queda en reporte_autoreparar.txt (se sube como artefacto junto al APK)
 
       - run: flutter pub get
 
