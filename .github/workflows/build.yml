@@ -131,7 +131,7 @@ jobs:
                   elif 'targetSdk ' in line:
                       new_lines.append('        targetSdk 36\n')
                   elif 'minSdk ' in line:
-                      new_lines.append('    minSdk 24\n')
+                      new_lines.append('        minSdk 24\n')
                   else:
                       new_lines.append(line)
 
@@ -350,6 +350,47 @@ jobs:
             python3 scripts/autoreparar_app.py
           fi
           # El resultado queda en reporte_autoreparar.txt (se sube como artefacto junto al APK)
+
+      - name: 5d. Corregir set duplicado y conflicto de Text en lib/main.dart con Python
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os, re
+
+          main_path = 'lib/main.dart'
+          if os.path.exists(main_path):
+              with open(main_path, 'r', encoding='utf-8') as f:
+                  code = f.read()
+
+              patron_set = re.compile(
+                  r'(static\s+const\s+Set<String>\s+_palabrasVacias\s*=\s*\{)(.*?)(\};)',
+                  re.DOTALL
+              )
+              def limpiar_set(match):
+                  inicio, cuerpo, fin = match.groups()
+                  items = re.findall(r"""'[^']*'|"[^"]*""", cuerpo)
+                  unicos = []
+                  for it in items:
+                      if it not in unicos:
+                          unicos.append(it)
+                  formateado = '\n      ' + ', '.join(unicos) + ',\n    '
+                  return inicio + formateado + fin
+
+              code = patron_set.sub(limpiar_set, code)
+
+              if 'import \'package:flutter/widgets.dart\' as fw;' not in code:
+                  code = "import 'package:flutter/widgets.dart' as fw;\n" + code
+
+              code = re.sub(
+                  r"(SimpleAttributionWidget\s*\(\s*source\s*:\s*)Text\(",
+                  r"\1fw.Text(",
+                  code
+              )
+
+              with open(main_path, 'w', encoding='utf-8') as f:
+                  f.write(code)
+              print('Parches aplicados en lib/main.dart')
+          PY
 
       - run: flutter pub get
 
