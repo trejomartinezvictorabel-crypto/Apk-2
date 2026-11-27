@@ -88,7 +88,6 @@ jobs:
           python3 - <<'PY'
           import os, re
 
-          # 1. Gradle Wrapper 8.10.2
           wrapper_path = 'android/gradle/wrapper/gradle-wrapper.properties'
           if os.path.exists(wrapper_path):
               with open(wrapper_path, 'r', encoding='utf-8') as f:
@@ -97,7 +96,6 @@ jobs:
               with open(wrapper_path, 'w', encoding='utf-8') as f:
                   f.write(new_wrapper)
 
-          # 2. Kotlin 2.1.0, AGP 8.3.2 y espejo de Maven dentro de dependencyResolutionManagement
           settings_path = 'android/settings.gradle'
           if os.path.exists(settings_path):
               txt = open(settings_path, encoding='utf-8').read()
@@ -121,7 +119,6 @@ jobs:
                   )
               open(settings_path, 'w', encoding='utf-8').write(txt)
 
-          # 3. Forzar SDK 36 y MinSDK 24 en android/app/build.gradle
           gradle_path = 'android/app/build.gradle'
           if os.path.exists(gradle_path):
               with open(gradle_path, 'r', encoding='utf-8') as f:
@@ -147,7 +144,6 @@ jobs:
               with open(gradle_path, 'w', encoding='utf-8') as f:
                   f.writelines(new_lines)
 
-          # 4. Permisos en AndroidManifest.xml
           manifest_path = 'android/app/src/main/AndroidManifest.xml'
           if os.path.exists(manifest_path):
               with open(manifest_path, 'r', encoding='utf-8') as f:
@@ -268,6 +264,36 @@ jobs:
                   print(f'Agregado namespace en: {bg_path}')
           PY
 
+      - name: 5. Parchear Uint8List en lib/main.dart con Python
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os, re
+
+          main_path = 'lib/main.dart'
+          if os.path.exists(main_path):
+              with open(main_path, 'r', encoding='utf-8') as f:
+                  code = f.read()
+
+              code = code.replace(
+                  'Uint8List.sublistView(trozo, ini, i + 1)',
+                  'Uint8List.fromList(trozo.sublist(ini, i + 1))'
+              )
+              code = code.replace(
+                  'Uint8List.sublistView(trozo, ini, trozo.length)',
+                  'Uint8List.fromList(trozo.sublist(ini, trozo.length))'
+              )
+              code = re.sub(
+                  r'Uint8List\.sublistView\(\s*([^,]+?)\s*,\s*([^,]+?)\s*,\s*([^)]+?)\s*\)',
+                  r'Uint8List.fromList(\1.sublist(\2, \3))',
+                  code
+              )
+
+              with open(main_path, 'w', encoding='utf-8') as f:
+                  f.write(code)
+              print('Parche aplicadas correcciones de Uint8List en lib/main.dart')
+          PY
+
       - name: 5b. Limpiar cualquier referencia inválida a dbus en pubspec.yaml
         shell: bash
         run: |
@@ -300,6 +326,47 @@ jobs:
           else
             python3 scripts/autoreparar_app.py
           fi
+
+      - name: 5d. Corregir set duplicado y conflicto de Text en lib/main.dart con Python
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os, re
+
+          main_path = 'lib/main.dart'
+          if os.path.exists(main_path):
+              with open(main_path, 'r', encoding='utf-8') as f:
+                  code = f.read()
+
+              patron_set = re.compile(
+                  r'(static\s+const\s+Set<String>\s+_palabrasVacias\s*=\s*\{)(.*?)(\};)',
+                  re.DOTALL
+              )
+              def limpiar_set(match):
+                  inicio, cuerpo, fin = match.groups()
+                  items = re.findall(r"""'[^']*'|"[^"]*""", cuerpo)
+                  unicos = []
+                  for it in items:
+                      if it not in unicos:
+                          unicos.append(it)
+                  formateado = '\n      ' + ', '.join(unicos) + ',\n    '
+                  return inicio + formateado + fin
+
+              code = patron_set.sub(limpiar_set, code)
+
+              if "import 'package:flutter/widgets.dart' as fw;" not in code:
+                  code = "import 'package:flutter/widgets.dart' as fw;\n" + code
+
+              code = re.sub(
+                  r"(SimpleAttributionWidget\s*\(\s*source\s*:\s*)Text\(",
+                  r"\1fw.Text(",
+                  code
+              )
+
+              with open(main_path, 'w', encoding='utf-8') as f:
+                  f.write(code)
+              print('Parches aplicados en lib/main.dart')
+          PY
 
       - run: flutter pub get
 
