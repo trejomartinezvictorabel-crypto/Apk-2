@@ -51,7 +51,7 @@ jobs:
             flutter_tts: ^4.0.2
             vosk_flutter: ^0.3.48
             sqflite: ^2.3.3+1
-            path: ^1.9.0
+            path: 1.9.0
             path_provider: ^2.1.4
             file_picker: ^8.1.2
             permission_handler: ^10.2.0
@@ -193,7 +193,6 @@ jobs:
                   for n in z.namelist():
                       print('  ', n)
 
-          # Si el reporte vino con otro nombre o dentro de una subcarpeta al descomprimir reporte.zip, normalizarlo
           if not os.path.exists('reporte_autoreparacion.json') and not os.path.exists('scripts/reporte_autoreparacion.json'):
               for dirpath, _, filenames in os.walk(raiz):
                   if '.git' in dirpath or 'android' in dirpath or 'build' in dirpath:
@@ -346,7 +345,7 @@ jobs:
             python3 scripts/autoreparar_app.py
           fi
 
-      - name: 5d. Corregir set duplicado y conflicto de Text en lib/main.dart con Python
+      - name: 5d. Corregir set duplicado, conflicto de Text y fijar path 1.9.0 tras autoreparar
         shell: bash
         run: |
           python3 - <<'PY'
@@ -385,6 +384,14 @@ jobs:
               with open(main_path, 'w', encoding='utf-8') as f:
                   f.write(code)
               print('Parches aplicados en lib/main.dart')
+
+          pubspec_path = 'pubspec.yaml'
+          if os.path.exists(pubspec_path):
+              pub = open(pubspec_path, encoding='utf-8').read()
+              pub_fixed = re.sub(r'(?m)^(\s*path:\s*).*$', r'\g<1>1.9.0', pub)
+              if pub_fixed != pub:
+                  open(pubspec_path, 'w', encoding='utf-8').write(pub_fixed)
+                  print('Fijado path: 1.9.0 en pubspec.yaml para compatibilidad con flutter_test')
           PY
 
       - run: flutter pub get
