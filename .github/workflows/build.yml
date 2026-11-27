@@ -392,49 +392,6 @@ jobs:
               print('Parches aplicados en lib/main.dart')
           PY
 
-      - name: 5e. Asegurar void main() en lib/main.dart con Python
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          import os, re
-
-          p = 'lib/main.dart'
-          v = 'scripts/validar_proyecto.py'
-
-          if os.path.exists(p):
-              with open(p, 'r', encoding='utf-8', errors='replace') as f:
-                  c = f.read()
-
-              c = re.sub(r'\n\nvoid main\(\) \{\s*WidgetsFlutterBinding\.ensureInitialized\(\);\s*runApp\([^\n]*\);\s*\}\s*$', '\n', c)
-              c = re.sub(r'runApp\(\s*const\s+Text\(\s*\)\s*\)', 'runApp(const SizedBox.shrink())', c)
-
-              # Reemplaza locationSettings: const LocationSettings(...) dentro de getCurrentPosition por desiredAccuracy: LocationAccuracy.low
-              c = re.sub(
-                  r'locationSettings\s*:\s*const\s+LocationSettings\s*\([^)]*\)',
-                  'desiredAccuracy: LocationAccuracy.low',
-                  c,
-              )
-
-              with open(p, 'w', encoding='utf-8') as f:
-                  f.write(c)
-
-              lines = c.splitlines()
-              for idx in range(max(0, 5385), min(len(lines), 5395)):
-                  print(f'L{idx+1}: {lines[idx]}')
-
-          if os.path.exists(v):
-              with open(v, 'r', encoding='utf-8', errors='replace') as f:
-                  vt = f.read()
-              new_lines = [l for l in vt.splitlines() if 'no tiene void main()' not in l]
-              vt2 = '\n'.join(new_lines)
-              if 'void main' in vt2:
-                  vt2 = re.sub(r'errores\s*\+=\s*1', 'errores += 0', vt2)
-              if vt2 != vt:
-                  with open(v, 'w', encoding='utf-8') as f:
-                      f.write(vt2 + '\n')
-          print('5e aplicado correctamente.')
-          PY
-
       - run: flutter pub get
 
       - name: 6. Validar licencias de las dependencias (que ninguna obligue a abrir tu código)
