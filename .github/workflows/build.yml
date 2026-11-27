@@ -97,7 +97,7 @@ jobs:
               with open(wrapper_path, 'w', encoding='utf-8') as f:
                   f.write(new_wrapper)
 
-          # 2. Kotlin 2.1.0 y AGP 8.3.2 en android/settings.gradle
+          # 2. Kotlin 2.1.0, AGP 8.3.2 y espejo de Maven dentro de dependencyResolutionManagement
           settings_path = 'android/settings.gradle'
           if os.path.exists(settings_path):
               txt = open(settings_path, encoding='utf-8').read()
@@ -111,29 +111,17 @@ jobs:
                   r'\g<1>8.3.2\g<2>',
                   txt
               )
+              mirror_url = 'maven { url "https://maven-central.storage-download.googleapis.com/maven2/" }'
+              if mirror_url not in txt:
+                  txt = re.sub(
+                      r'(dependencyResolutionManagement\s*\{\s*repositories\s*\{)',
+                      r'\1\n        ' + mirror_url,
+                      txt,
+                      count=1
+                  )
               open(settings_path, 'w', encoding='utf-8').write(txt)
 
-          # 3. Espejo de Maven Central (evita error 429 Too Many Requests en repo.maven.apache.org)
-          init_dir = os.path.expanduser('~/.gradle/init.d')
-          os.makedirs(init_dir, exist_ok=True)
-          with open(os.path.join(init_dir, 'mirror.gradle'), 'w', encoding='utf-8') as f:
-              f.write('''allprojects {
-              buildscript {
-                  repositories {
-                      maven { url "https://maven-central.storage-download.googleapis.com/maven2/" }
-                      google()
-                      mavenCentral()
-                  }
-              }
-              repositories {
-                  maven { url "https://maven-central.storage-download.googleapis.com/maven2/" }
-                  google()
-                  mavenCentral()
-              }
-          }
-          ''')
-
-          # 4. Forzar SDK 36 y MinSDK 24 en android/app/build.gradle
+          # 3. Forzar SDK 36 y MinSDK 24 en android/app/build.gradle
           gradle_path = 'android/app/build.gradle'
           if os.path.exists(gradle_path):
               with open(gradle_path, 'r', encoding='utf-8') as f:
@@ -159,7 +147,7 @@ jobs:
               with open(gradle_path, 'w', encoding='utf-8') as f:
                   f.writelines(new_lines)
 
-          # 5. Permisos en AndroidManifest.xml
+          # 4. Permisos en AndroidManifest.xml
           manifest_path = 'android/app/src/main/AndroidManifest.xml'
           if os.path.exists(manifest_path):
               with open(manifest_path, 'r', encoding='utf-8') as f:
