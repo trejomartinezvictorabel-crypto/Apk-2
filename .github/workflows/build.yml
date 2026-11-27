@@ -171,21 +171,40 @@ jobs:
                       f.write(manifest)
           PY
 
-      - name: 3b. Descomprimir archivos.zip (manifiesto, íconos, política y validadores)
+      - name: 3b. Descomprimir archivos.zip y reporte.zip si existen
         shell: bash
         run: |
           python3 - <<'PY'
-          import os, sys, zipfile
-          if not os.path.isfile('archivos.zip'):
-              sys.exit('ERROR: no encuentro archivos.zip en la raíz del repositorio. Súbelo junto a lib/main.dart.')
-          z = zipfile.ZipFile('archivos.zip')
+          import os, shutil, sys, zipfile
+
           raiz = os.path.abspath('.')
-          for n in z.namelist():
-              destino = os.path.abspath(os.path.join(raiz, n))
-              if not destino.startswith(raiz + os.sep):
-                  sys.exit('ERROR: ruta insegura dentro del zip: ' + n)
-          z.extractall(raiz)
-          print('archivos.zip descomprimido: %d archivos' % len([n for n in z.namelist() if not n.endswith('/')]))
+          for zip_name in ['archivos.zip', 'reporte.zip']:
+              if not os.path.isfile(zip_name):
+                  if zip_name == 'archivos.zip':
+                      sys.exit('ERROR: no encuentro archivos.zip en la raíz del repositorio. Súbelo junto a lib/main.dart.')
+                  continue
+              with zipfile.ZipFile(zip_name) as z:
+                  for n in z.namelist():
+                      destino = os.path.abspath(os.path.join(raiz, n))
+                      if not destino.startswith(raiz + os.sep):
+                          sys.exit('ERROR: ruta insegura dentro del zip: ' + n)
+                  z.extractall(raiz)
+                  print(f'{zip_name} descomprimido: %d archivos' % len([n for n in z.namelist() if not n.endswith('/')]))
+                  for n in z.namelist():
+                      print('  ', n)
+
+          # Si el reporte vino con otro nombre o dentro de una subcarpeta al descomprimir reporte.zip, normalizarlo
+          if not os.path.exists('reporte_autoreparacion.json') and not os.path.exists('scripts/reporte_autoreparacion.json'):
+              for dirpath, _, filenames in os.walk(raiz):
+                  if '.git' in dirpath or 'android' in dirpath or 'build' in dirpath:
+                      continue
+                  for fn in filenames:
+                      if fn.endswith('.json') and ('reporte' in fn.lower() or 'autorepar' in fn.lower()):
+                          src_json = os.path.join(dirpath, fn)
+                          dst_json = os.path.join(raiz, 'reporte_autoreparacion.json')
+                          shutil.copy2(src_json, dst_json)
+                          print(f'Reporte detectado y copiado a: {dst_json} (desde {src_json})')
+                          break
           PY
 
       - name: 3c. Firma fija (para que cada APK se instale ENCIMA del anterior sin conflicto de paquete)
