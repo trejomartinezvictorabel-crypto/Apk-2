@@ -392,6 +392,39 @@ jobs:
               print('Parches aplicados en lib/main.dart')
           PY
 
+      - name: 5e. Asegurar void main() en lib/main.dart con Python
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os, re
+
+          main_path = 'lib/main.dart'
+          if os.path.exists(main_path):
+              with open(main_path, 'r', encoding='utf-8') as f:
+                  code = f.read()
+
+              if not re.search(r'\bvoid\s+main\s*\(', code):
+                  # Normalizar si existiera main() sin void o runApp suelto
+                  if re.search(r'(?m)^\s*main\s*\(\s*\)\s*(async\s*)?\{', code):
+                      code = re.sub(r'(?m)^(\s*)main\s*\(\s*\)\s*(async\s*)?\{', r'\1void main() \2{', code, count=1)
+                  else:
+                      # Buscar alguna clase StatefulWidget o StatelessWidget para lanzar la app
+                      m_widget = re.search(r'\bclass\s+([A-Za-z_][A-Za-z0-9_]*)\s+extends\s+(?:StatefulWidget|StatelessWidget)\b', code)
+                      app_cls = m_widget.group(1) if m_widget else 'MyApp'
+                      entry = (
+                          "\nvoid main() {\n"
+                          "  WidgetsFlutterBinding.ensureInitialized();\n"
+                          f"  runApp(const {app_cls}());\n"
+                          "}\n"
+                      )
+                      code = code + entry
+                  with open(main_path, 'w', encoding='utf-8') as f:
+                      f.write(code)
+                  print('Se restauró void main() en lib/main.dart')
+              else:
+                  print('void main() ya está presente en lib/main.dart')
+          PY
+
       - run: flutter pub get
 
       - name: 6. Validar licencias de las dependencias (que ninguna obligue a abrir tu código)
