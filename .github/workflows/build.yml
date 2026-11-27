@@ -424,28 +424,21 @@ jobs:
                   )
                   print('Agregado void main() en lib/main.dart')
 
-              code = re.sub(
-                  r'\blocationSettings\s*:\s*const\s+LocationSettings\s*\(\s*accuracy\s*:\s*([^,)]+?)\s*,\s*timeLimit\s*:\s*[^)]+\)',
-                  r'locationSettings: const LocationSettings(accuracy: \1)',
-                  code
-              )
-              code = re.sub(
-                  r'\blocationSettings\s*:\s*const\s+LocationSettings\s*\(\s*accuracy\s*:\s*([^,)]+?)\s*\)\s*\)',
-                  r'locationSettings: const LocationSettings(accuracy: \1))',
-                  code
-              )
-              code = re.sub(
-                  r'(\bLocationSettings\s*\([^)]*?),\s*timeLimit\s*:\s*[^,)]+',
-                  r'\1',
-                  code,
-                  flags=re.DOTALL
-              )
-              code = re.sub(
-                  r'(\bLocationSettings\s*\(\s*)timeLimit\s*:\s*[^,)]+\s*,?\s*',
-                  r'\1',
-                  code,
-                  flags=re.DOTALL
-              )
+              # Reparar cualquier línea con locationSettings: const LocationSettings(...) que tenga paréntesis sobrantes
+              lines = code.splitlines(keepends=True)
+              fixed_lines = []
+              for line in lines:
+                  if 'locationSettings:' in line and 'LocationSettings(' in line:
+                      line = re.sub(r',\s*timeLimit\s*:\s*[^)]*', '', line)
+                      line = re.sub(r'timeLimit\s*:\s*[^,)]*,?\s*', '', line)
+                      open_p = line.count('(')
+                      close_p = line.count(')')
+                      while close_p > open_p and line.rstrip().endswith(')'):
+                          idx = line.rfind(')')
+                          line = line[:idx] + line[idx+1:]
+                          close_p -= 1
+                  fixed_lines.append(line)
+              code = ''.join(fixed_lines)
 
               m_widget = re.search(
                   r'\bclass\s+([A-Za-z_][A-Za-z0-9_]*)\s+extends\s+(?:StatefulWidget|StatelessWidget)\b',
