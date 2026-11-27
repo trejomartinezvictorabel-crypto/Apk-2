@@ -395,7 +395,7 @@ jobs:
       - name: 5e. Asegurar void main() en lib/main.dart con Python
         shell: bash
         run: |
-          python3 -c "import os, re; p='lib/main.dart'; c=open(p,encoding='utf-8',errors='replace').read() if os.path.exists(p) else ''; tiene=bool(re.search(r'(?m)^[ \t]*(?:Future<[^>]+>\s+|void\s+)?main\s*\([^)]*\)\s*(?:async\s*)?\{', c)); m=re.search(r'class\s+([A-Za-z_][A-Za-z0-9_]*)\s+extends\s+(?:StatelessWidget|StatefulWidget)', c); w=m.group(1) if m else None; b=('\n\nvoid main() {\n  WidgetsFlutterBinding.ensureInitialized();\n  runApp(const ' + w + '());\n}\n') if w else ('\n\nvoid main() {\n  WidgetsFlutterBinding.ensureInitialized();\n  runApp(const MaterialApp(debugShowCheckedModeBanner: false, home: Scaffold(body: Center(child: Text(\"Navegación Offline\")))));\n}\n'); c=((\"import 'package:flutter/material.dart';\n\"+c+b) if 'package:flutter/material.dart' not in c else (c+b)) if (p and not tiene) else c; open(p,'w',encoding='utf-8').write(c) if (p and not tiene) else None; print('OK main():', tiene or bool(p))"
+          python3 -c "import os, re; p='lib/main.dart'; c=open(p,encoding='utf-8',errors='replace').read() if os.path.exists(p) else ''; tiene='void main(' in c or 'main()' in c; m=re.search(r'class\s+([A-Za-z_][A-Za-z0-9_]*)\s+extends\s+(?:StatelessWidget|StatefulWidget)', c); w=m.group(1) if m else None; b=('\n\nvoid main() {\n  WidgetsFlutterBinding.ensureInitialized();\n  runApp(const ' + w + '());\n}\n') if w else ('\n\nvoid main() {\n  WidgetsFlutterBinding.ensureInitialized();\n  runApp(const MaterialApp(debugShowCheckedModeBanner: false, home: Scaffold(body: Center(child: Text(\"Navegación Offline\")))));\n}\n'); c=((\"import 'package:flutter/material.dart';\n\"+c+b) if 'package:flutter/material.dart' not in c else (c+b)) if (p and not tiene) else c; open(p,'w',encoding='utf-8').write(c) if (p and not tiene) else None; print('void_main_agregado:', bool(p and not tiene))"
 
       - run: flutter pub get
 
@@ -443,4 +443,3 @@ jobs:
         with:
           name: reportes-validacion
           path: reporte_*.txt
-
