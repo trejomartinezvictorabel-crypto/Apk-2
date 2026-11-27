@@ -392,6 +392,55 @@ jobs:
               print('Parches aplicados en lib/main.dart')
           PY
 
+      - name: 5e. Asegurar void main() en lib/main.dart con Python
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os, re
+
+          main_path = 'lib/main.dart'
+          if os.path.exists(main_path):
+              with open(main_path, 'r', encoding='utf-8', errors='replace') as f:
+                  code = f.read()
+
+              if re.search(r'\bmain\s*\(', code):
+                  print('lib/main.dart ya cuenta con funcion main().')
+              else:
+                  m = re.search(
+                      r'class\s+([A-Za-z_][A-Za-z0-9_]*)\s+extends\s+(?:StatelessWidget|StatefulWidget)',
+                      code,
+                  )
+                  if m:
+                      widget_name = m.group(1)
+                      bloque_main = (
+                          '\n\nvoid main() {\n'
+                          '  WidgetsFlutterBinding.ensureInitialized();\n'
+                          f'  runApp(const {widget_name}());\n'
+                          '}\n'
+                      )
+                  else:
+                      bloque_main = (
+                          '\n\nvoid main() {\n'
+                          '  WidgetsFlutterBinding.ensureInitialized();\n'
+                          '  runApp(\n'
+                          '    const MaterialApp(\n'
+                          '      debugShowCheckedModeBanner: false,\n'
+                          '      home: Scaffold(\n'
+                          '        body: Center(child: Text(\'Navegación Offline\')),\n'
+                          '      ),\n'
+                          '    ),\n'
+                          '  );\n'
+                          '}\n'
+                      )
+
+                  if 'package:flutter/material.dart' not in code:
+                      code = "import 'package:flutter/material.dart';\n" + code
+
+                  with open(main_path, 'w', encoding='utf-8') as f:
+                      f.write(code + bloque_main)
+                  print('Agregado void main() en lib/main.dart.')
+          PY
+
       - run: flutter pub get
 
       - name: 6. Validar licencias de las dependencias (que ninguna obligue a abrir tu código)
