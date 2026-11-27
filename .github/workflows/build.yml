@@ -405,33 +405,33 @@ jobs:
               with open(p, 'r', encoding='utf-8', errors='replace') as f:
                   c = f.read()
 
-              # Quitar main() duplicado inyectado si existia
               c = re.sub(r'\n\nvoid main\(\) \{\s*WidgetsFlutterBinding\.ensureInitialized\(\);\s*runApp\([^\n]*\);\s*\}\s*$', '\n', c)
               c = re.sub(r'runApp\(\s*const\s+Text\(\s*\)\s*\)', 'runApp(const SizedBox.shrink())', c)
 
-              # Limpiar llamadas rotas con locationSettings que fallan en geolocator
+              # Repara llamadas cortadas a Geolocator.getCurrentPosition( sin cerrar
+              c = re.sub(
+                  r'(Geolocator\.getCurrentPosition\()\s*(?=\n\s*(?:[a-zA-Z_]|//|/\*|\}|\]|\)))',
+                  r'\1locationSettings: const LocationSettings(accuracy: LocationAccuracy.low));',
+                  c,
+              )
+
               lines = c.splitlines()
               fixed_lines = []
               for i, line in enumerate(lines):
                   if 'locationSettings:' in line and 'LocationSettings' in line:
-                      # Reemplaza la linea rota por una llamada limpia a getCurrentPosition sin parametros invalidos
                       fixed_lines.append('        locationSettings: const LocationSettings(accuracy: LocationAccuracy.low),')
+                  elif line.rstrip().endswith('Geolocator.getCurrentPosition('):
+                      indent = re.match(r'^(\s*)', line).group(1)
+                      fixed_lines.append(f'{indent}Geolocator.getCurrentPosition(locationSettings: const LocationSettings(accuracy: LocationAccuracy.low));')
                   else:
                       fixed_lines.append(line)
               c = '\n'.join(fixed_lines) + ('\n' if c.endswith('\n') else '')
 
-              # Si getCurrentPosition tiene locationSettings como argumento invalido, normalizarlo
-              c = re.sub(
-                  r'Geolocator\.getCurrentPosition\(\s*locationSettings\s*:\s*const\s+LocationSettings\([^)]*\)\s*\)',
-                  'Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.low)',
-                  c,
-              )
-
               with open(p, 'w', encoding='utf-8') as f:
                   f.write(c)
 
-              for idx in range(max(0, 5204), min(len(lines), 5216)):
-                  print(f'L{idx+1}: {lines[idx]}')
+              for idx in range(max(0, 5385), min(len(fixed_lines), 5395)):
+                  print(f'L{idx+1}: {fixed_lines[idx]}')
 
           if os.path.exists(v):
               with open(v, 'r', encoding='utf-8', errors='replace') as f:
