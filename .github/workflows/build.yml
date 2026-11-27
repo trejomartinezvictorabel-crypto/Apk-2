@@ -408,25 +408,37 @@ jobs:
               c = re.sub(r'\n\nvoid main\(\) \{\s*WidgetsFlutterBinding\.ensureInitialized\(\);\s*runApp\([^\n]*\);\s*\}\s*$', '\n', c)
               c = re.sub(r'runApp\(\s*const\s+Text\(\s*\)\s*\)', 'runApp(const SizedBox.shrink())', c)
 
-              # Repara llamadas cortadas a Geolocator.getCurrentPosition( sin cerrar
-              c = re.sub(
-                  r'(Geolocator\.getCurrentPosition\()\s*(?=\n\s*(?:[a-zA-Z_]|//|/\*|\}|\]|\)))',
-                  r'\1locationSettings: const LocationSettings(accuracy: LocationAccuracy.low));',
-                  c,
-              )
-
               lines = c.splitlines()
               fixed_lines = []
-              for i, line in enumerate(lines):
-                  if 'locationSettings:' in line and 'LocationSettings' in line:
-                      fixed_lines.append('        locationSettings: const LocationSettings(accuracy: LocationAccuracy.low),')
-                  elif line.rstrip().endswith('Geolocator.getCurrentPosition('):
+              i = 0
+              while i < len(lines):
+                  line = lines[i]
+                  stripped = line.strip()
+                  if stripped.startswith('locationSettings: const LocationSettings(') and stripped.endswith('),'):
+                      # Omitir lineas sueltas de locationSettings que quedaron fuera de una llamada
+                      i += 1
+                      continue
+                  if 'Geolocator.getCurrentPosition(' in line and not line.rstrip().endswith(');'):
                       indent = re.match(r'^(\s*)', line).group(1)
-                      fixed_lines.append(f'{indent}Geolocator.getCurrentPosition(locationSettings: const LocationSettings(accuracy: LocationAccuracy.low));')
-                  else:
-                      fixed_lines.append(line)
-              c = '\n'.join(fixed_lines) + ('\n' if c.endswith('\n') else '')
+                      prefix = line.split('Geolocator.getCurrentPosition(', 1)[0]
+                      fixed_lines.append(
+                          f'{prefix}Geolocator.getCurrentPosition(locationSettings: const LocationSettings(accuracy: LocationAccuracy.low));'
+                      )
+                      # Saltar lineas continuacion rotas de esa llamada hasta punto y coma o ultimaConocida
+                      i += 1
+                      while i < len(lines):
+                          s_next = lines[i].strip()
+                          if s_next.startswith('ultimaConocida'):
+                              break
+                          if s_next.endswith(');'):
+                              i += 1
+                              break
+                          i += 1
+                      continue
+                  fixed_lines.append(line)
+                  i += 1
 
+              c = '\n'.join(fixed_lines) + ('\n' if c.endswith('\n') else '')
               with open(p, 'w', encoding='utf-8') as f:
                   f.write(c)
 
