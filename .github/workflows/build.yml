@@ -389,13 +389,27 @@ jobs:
           if os.path.exists(pubspec_path):
               pub = open(pubspec_path, encoding='utf-8').read()
               fijados = {
+                  'flutter_map': '^6.2.1',
+                  'latlong2': '^0.9.1',
+                  'geolocator': '^12.0.0',
+                  'flutter_tts': '^4.0.2',
+                  'vosk_flutter': '^0.3.48',
+                  'sqflite': '^2.3.3+1',
                   'path': '1.9.0',
+                  'path_provider': '^2.1.4',
+                  'file_picker': '^8.1.2',
+                  'permission_handler': '^10.2.0',
+                  'wakelock_plus': '^1.2.8',
+                  'flutter_compass': '^0.8.1',
+                  'webview_flutter': '^4.10.0',
                   'url_launcher': '^6.3.0',
+                  'dartssh2': '^2.9.0',
+                  'flutter_local_notifications': '^17.2.4',
               }
               for pkg, ver in fijados.items():
                   pub = re.sub(rf'(?m)^(\s*{re.escape(pkg)}:\s*).*$', rf'\g<1>{ver}', pub)
               open(pubspec_path, 'w', encoding='utf-8').write(pub)
-              print('Versiones compatibles fijadas en pubspec.yaml')
+              print('Versiones compatibles con Dart 3.6.0 restauradas en pubspec.yaml')
           PY
 
       - run: flutter pub get
