@@ -345,7 +345,7 @@ jobs:
             python3 scripts/autoreparar_app.py
           fi
 
-      - name: 5d. Corregir set duplicado, conflicto de Text y fijar path 1.9.0 tras autoreparar
+      - name: 5d. Corregir set duplicado, conflicto de Text y fijar versiones compatibles tras autoreparar
         shell: bash
         run: |
           python3 - <<'PY'
@@ -388,10 +388,14 @@ jobs:
           pubspec_path = 'pubspec.yaml'
           if os.path.exists(pubspec_path):
               pub = open(pubspec_path, encoding='utf-8').read()
-              pub_fixed = re.sub(r'(?m)^(\s*path:\s*).*$', r'\g<1>1.9.0', pub)
-              if pub_fixed != pub:
-                  open(pubspec_path, 'w', encoding='utf-8').write(pub_fixed)
-                  print('Fijado path: 1.9.0 en pubspec.yaml para compatibilidad con flutter_test')
+              fijados = {
+                  'path': '1.9.0',
+                  'url_launcher': '^6.3.0',
+              }
+              for pkg, ver in fijados.items():
+                  pub = re.sub(rf'(?m)^(\s*{re.escape(pkg)}:\s*).*$', rf'\g<1>{ver}', pub)
+              open(pubspec_path, 'w', encoding='utf-8').write(pub)
+              print('Versiones compatibles fijadas en pubspec.yaml')
           PY
 
       - run: flutter pub get
