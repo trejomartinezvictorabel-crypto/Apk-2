@@ -2,8 +2,8 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main, master ]   # se dispara solo al subir archivos (archivos.zip, workflow, scripts...)
-  workflow_dispatch:             # y también a mano desde Actions -> Run workflow
+    branches: [ main, master ]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -20,6 +20,7 @@ jobs:
           cache: true
 
       - name: 1. Crear pubspec.yaml y descargar modelo de Vosk automáticamente
+        shell: bash
         run: |
           python3 - <<'PY'
           import os, urllib.request
@@ -80,13 +81,13 @@ jobs:
 
       - name: 2. Generar plataforma Android base
         run: flutter create . --org com.albanil.app --project-name navegacion_offline_mx --platforms=android
-      
+
       - name: 3. Parchear Gradle, Kotlin, SDK y Permisos con Python
+        shell: bash
         run: |
           python3 - <<'PY'
           import os
 
-          # 1. Actualizar Gradle Wrapper a 8.10.2
           wrapper_path = 'android/gradle/wrapper/gradle-wrapper.properties'
           if os.path.exists(wrapper_path):
               with open(wrapper_path, 'r', encoding='utf-8') as f:
@@ -95,23 +96,21 @@ jobs:
               with open(wrapper_path, 'w', encoding='utf-8') as f:
                   f.write(new_wrapper)
 
-          # 2. Actualizar la versión de Kotlin a 2.1.0 en android/settings.gradle
           settings_path = 'android/settings.gradle'
           if os.path.exists(settings_path):
               with open(settings_path, 'r', encoding='utf-8') as f:
                   lines = f.readlines()
-              
+
               new_settings = []
               for line in lines:
                   if 'org.jetbrains.kotlin.android' in line:
                       new_settings.append('    id "org.jetbrains.kotlin.android" version "2.1.0" apply false\n')
                   else:
                       new_settings.append(line)
-              
+
               with open(settings_path, 'w', encoding='utf-8') as f:
                   f.writelines(new_settings)
 
-          # 3. Forzar SDK 36 y MinSDK 24 en android/app/build.gradle
           gradle_path = 'android/app/build.gradle'
           if os.path.exists(gradle_path):
               with open(gradle_path, 'r', encoding='utf-8') as f:
@@ -121,20 +120,4 @@ jobs:
               for line in lines:
                   if 'compileSdkVersion' in line:
                       new_lines.append('    compileSdkVersion 36\n')
-                  elif 'targetSdkVersion' in line:
-                      new_lines.append('        targetSdkVersion 36\n')
-                  elif 'minSdkVersion' in line:
-                      new_lines.append('        minSdkVersion 24\n')
-                  elif 'compileSdk ' in line:
-                      new_lines.append('    compileSdk 36\n')
-                  elif 'targetSdk ' in line:
-                      new_lines.append('        targetSdk 36\n')
-                  elif 'minSdk ' in line:
-                      new_lines.append('        minSdk 24\n')
-                  else:
-                      new_lines.append(line)
-
-              with open(gradle_path, 'w', encoding='utf-8') as f:
-                  f.writelines(new_lines)
-
-          # 4. Agregar permisos en AndroidManifest.xml
+                  elif
