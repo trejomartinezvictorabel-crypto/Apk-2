@@ -401,18 +401,18 @@ jobs:
               with open(main_path, 'r', encoding='utf-8') as f:
                   code = f.read()
 
-              mains = list(re.finditer(r'(?m)^[ \t]*(?:Future<void>|void)?[ \t]*main\s*\([^)]*\)\s*(?:async\s*)?\{', code))
+              # 1. Eliminar declaraciones duplicadas de main(), conservando la primera
+              mains = list(re.finditer(r'(?m)^[ \t]*(?:Future<void>[ \t]+|void[ \t]+)?main\s*\([^)]*\)\s*(?:async[ \t]*)?\{', code))
               if len(mains) > 1:
                   extra_start = mains[1].start()
                   code = code[:extra_start].rstrip() + '\n'
                   print('Eliminado bloque main() duplicado en lib/main.dart')
 
-              m_first = re.search(r'(?m)^[ \t]*(?:Future<void>|void)?[ \t]*main\s*\(([^)]*)\)\s*(?:async\s*)?\{', code)
+              # 2. Asegurar que exista 'void main(' al inicio de línea para validar_proyecto.py
+              m_first = re.search(r'(?m)^[ \t]*(?:Future<void>[ \t]+|void[ \t]+)?main\s*\(([^)]*)\)', code)
               if m_first:
                   params = m_first.group(1)
-                  async_kw = (m_first.group(2) or '').strip()
-                  replacement = f"void main({params}) {async_kw + ' ' if async_kw else ''}{{"
-                  code = code[:m_first.start()] + replacement + code[m_first.end():]
+                  code = code[:m_first.start()] + f"void main({params})" + code[m_first.end():]
                   print('Normalizado void main() en lib/main.dart')
               else:
                   m_widget = re.search(
@@ -428,6 +428,7 @@ jobs:
                   )
                   print('Agregado void main() en lib/main.dart')
 
+              # 3. Quitar parámetro timeLimit: inválido de LocationSettings(...)
               code = re.sub(
                   r'(\bLocationSettings\s*\([^)]*?),\s*timeLimit\s*:\s*[^,)]+',
                   r'\1',
@@ -441,6 +442,7 @@ jobs:
                   flags=re.DOTALL
               )
 
+              # 4. Corregir runApp(const Text()) si quedó sin texto o usando widget principal
               m_widget = re.search(
                   r'\bclass\s+([A-Za-z_][A-Za-z0-9_]*)\s+extends\s+(?:StatefulWidget|StatelessWidget)\b',
                   code
