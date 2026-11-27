@@ -2,8 +2,8 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main, master ]   # se dispara solo al subir archivos (archivos.zip, workflow, scripts...)
-  workflow_dispatch:             # y también a mano desde Actions -> Run workflow
+    branches: [ main, master ]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -20,27 +20,27 @@ jobs:
           cache: true
 
       - name: 1. Crear pubspec.yaml y descargar modelo de Vosk automáticamente
+        shell: bash
         run: |
-          python3 -c "
-          import os
+          python3 - <<'PY'
+          import os, urllib.request
 
-          # Asegurar que exista la carpeta assets/models
           os.makedirs('assets/models', exist_ok=True)
 
-          # Descargar el modelo de Vosk en español de forma robusta con curl
           model_zip = 'assets/models/vosk-model-small-es-0.42.zip'
           if not os.path.exists(model_zip) or os.path.getsize(model_zip) < 1000000:
               print('Descargando el modelo de Vosk (español)...')
-              os.system(f'curl -L \"https://alphacephei.com/vosk/models/vosk-model-small-es-0.42.zip\" -o {model_zip}')
+              url = 'https://alphacephei.com/vosk/models/vosk-model-small-es-0.42.zip'
+              urllib.request.urlretrieve(url, model_zip)
               print('¡Modelo descargado y colocado en assets/models/ con éxito!')
 
           pubspec_content = '''name: navegacion_offline_mx
           description: Navegación multimodal offline para todo el mundo.
-          publish_to: \"none\"
+          publish_to: "none"
           version: 1.0.0+1
 
           environment:
-            sdk: \">=3.0.0 <4.0.0\"
+            sdk: ">=3.0.0 <4.0.0"
 
           dependencies:
             flutter:
@@ -75,47 +75,68 @@ jobs:
             assets:
               - assets/models/
           '''
-          with open('pubspec.yaml', 'w') as f:
+          with open('pubspec.yaml', 'w', encoding='utf-8') as f:
               f.write(pubspec_content)
-          "
+          PY
 
       - name: 2. Generar plataforma Android base
         run: flutter create . --org com.albanil.app --project-name navegacion_offline_mx --platforms=android
-      
-      - name: 3. Parchear Gradle, Kotlin, SDK y Permisos con Python
-        run: |
-          python3 -c "
-          import os
 
-          # 1. Actualizar Gradle Wrapper a 8.10.2
+      - name: 3. Parchear Gradle, Kotlin, AGP, SDK y Permisos con Python
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os, re
+
+          # 1. Gradle Wrapper 8.10.2
           wrapper_path = 'android/gradle/wrapper/gradle-wrapper.properties'
           if os.path.exists(wrapper_path):
-              with open(wrapper_path, 'r') as f:
+              with open(wrapper_path, 'r', encoding='utf-8') as f:
                   wrapper_content = f.read()
               new_wrapper = wrapper_content.split('distributionUrl=')[0] + 'distributionUrl=https\\://services.gradle.org/distributions/gradle-8.10.2-bin.zip\n'
-              with open(wrapper_path, 'w') as f:
+              with open(wrapper_path, 'w', encoding='utf-8') as f:
                   f.write(new_wrapper)
 
-          # 2. Actualizar la versión de Kotlin a 2.1.0 en android/settings.gradle
+          # 2. Kotlin 2.1.0 y AGP 8.3.2 en android/settings.gradle
           settings_path = 'android/settings.gradle'
           if os.path.exists(settings_path):
-              with open(settings_path, 'r') as f:
-                  lines = f.readlines()
-              
-              new_settings = []
-              for line in lines:
-                  if 'org.jetbrains.kotlin.android' in line:
-                      new_settings.append('    id \"org.jetbrains.kotlin.android\" version \"2.1.0\" apply false\n')
-                  else:
-                      new_settings.append(line)
-              
-              with open(settings_path, 'w') as f:
-                  f.writelines(new_settings)
+              txt = open(settings_path, encoding='utf-8').read()
+              txt = re.sub(
+                  r'(id\s+["\']org\.jetbrains\.kotlin\.android["\']\s+version\s+["\'])[^"\']+(["\'])',
+                  r'\g<1>2.1.0\g<2>',
+                  txt
+              )
+              txt = re.sub(
+                  r'(id\s+["\']com\.android\.application["\']\s+version\s+["\'])[^"\']+(["\'])',
+                  r'\g<1>8.3.2\g<2>',
+                  txt
+              )
+              open(settings_path, 'w', encoding='utf-8').write(txt)
 
-          # 3. Forzar SDK 36 y MinSDK 24 en android/app/build.gradle
+          # 3. Espejo de Maven Central (evita error 429 Too Many Requests en repo.maven.apache.org)
+          init_dir = os.path.expanduser('~/.gradle/init.d')
+          os.makedirs(init_dir, exist_ok=True)
+          with open(os.path.join(init_dir, 'mirror.gradle'), 'w', encoding='utf-8') as f:
+              f.write('''allprojects {
+              buildscript {
+                  repositories {
+                      maven { url "https://maven-central.storage-download.googleapis.com/maven2/" }
+                      google()
+                      mavenCentral()
+                  }
+              }
+              repositories {
+                  maven { url "https://maven-central.storage-download.googleapis.com/maven2/" }
+                  google()
+                  mavenCentral()
+              }
+          }
+          ''')
+
+          # 4. Forzar SDK 36 y MinSDK 24 en android/app/build.gradle
           gradle_path = 'android/app/build.gradle'
           if os.path.exists(gradle_path):
-              with open(gradle_path, 'r') as f:
+              with open(gradle_path, 'r', encoding='utf-8') as f:
                   lines = f.readlines()
 
               new_lines = []
@@ -135,66 +156,35 @@ jobs:
                   else:
                       new_lines.append(line)
 
-              with open(gradle_path, 'w') as f:
+              with open(gradle_path, 'w', encoding='utf-8') as f:
                   f.writelines(new_lines)
 
-          # 4. Agregar permisos en AndroidManifest.xml
+          # 5. Permisos en AndroidManifest.xml
           manifest_path = 'android/app/src/main/AndroidManifest.xml'
           if os.path.exists(manifest_path):
-              with open(manifest_path, 'r') as f:
+              with open(manifest_path, 'r', encoding='utf-8') as f:
                   manifest = f.read()
-              
+
               permisos = '''
-                  <uses-permission android:name=\"android.permission.INTERNET\"/>
-                  <uses-permission android:name=\"android.permission.ACCESS_FINE_LOCATION\"/>
-                  <uses-permission android:name=\"android.permission.ACCESS_COARSE_LOCATION\"/>
-                  <uses-permission android:name=\"android.permission.FOREGROUND_SERVICE\"/>
-                  <uses-permission android:name=\"android.permission.FOREGROUND_SERVICE_LOCATION\"/>
-                  <uses-permission android:name=\"android.permission.RECORD_AUDIO\"/>
-                  <uses-permission android:name=\"android.permission.POST_NOTIFICATIONS\"/>
-                  <uses-permission android:name=\"android.permission.WAKE_LOCK\"/>
-                  <uses-permission android:name=\"android.permission.MANAGE_EXTERNAL_STORAGE\"/>
-                  <uses-permission android:name=\"android.permission.READ_EXTERNAL_STORAGE\" android:maxSdkVersion=\"32\"/>
+                  <uses-permission android:name="android.permission.INTERNET"/>
+                  <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+                  <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+                  <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+                  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
+                  <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+                  <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+                  <uses-permission android:name="android.permission.WAKE_LOCK"/>
+                  <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"/>
+                  <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
                   <queries>
-                      <intent><action android:name=\"android.intent.action.TTS_SERVICE\"/></intent>
-                      <intent><action android:name=\"android.speech.RecognitionService\"/></intent>
+                      <intent><action android:name="android.intent.action.TTS_SERVICE"/></intent>
+                      <intent><action android:name="android.speech.RecognitionService"/></intent>
                   </queries>
               '''
               if '<application' in manifest and 'ACCESS_FINE_LOCATION' not in manifest:
                   manifest = manifest.replace('<application', permisos + '\n    <application')
-                  with open(manifest_path, 'w') as f:
+                  with open(manifest_path, 'w', encoding='utf-8') as f:
                       f.write(manifest)
-          "
-
-      - name: 3a2. Actualizar AGP a 8.3.2 para androidx.webkit:webkit:1.14.0 con Python
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          import os, re
-
-          candidates = [
-              'android/settings.gradle',
-              'android/settings.gradle.kts',
-              'android/build.gradle',
-              'android/build.gradle.kts',
-          ]
-          for path in candidates:
-              if not os.path.exists(path):
-                  continue
-              txt = open(path, encoding='utf-8').read()
-              new_txt = re.sub(
-                  r'(com\.android\.application[\"\']?\s*(?:version\s*[\"\']|:))\d+\.\d+\.\d+',
-                  r'\g<1>8.3.2',
-                  txt,
-              )
-              new_txt = re.sub(
-                  r'(com\.android\.tools\.build:gradle:)\d+\.\d+\.\d+',
-                  r'\g<1>8.3.2',
-                  new_txt,
-              )
-              if new_txt != txt:
-                  open(path, 'w', encoding='utf-8').write(new_txt)
-                  print(f'Actualizado AGP a 8.3.2 en {path}')
           PY
 
       - name: 3b. Descomprimir archivos.zip (manifiesto, íconos, política y validadores)
@@ -206,14 +196,12 @@ jobs:
               sys.exit('ERROR: no encuentro archivos.zip en la raíz del repositorio. Súbelo junto a lib/main.dart.')
           z = zipfile.ZipFile('archivos.zip')
           raiz = os.path.abspath('.')
-          for n in z.namelist():  # evita rutas que se salgan de la carpeta del proyecto
+          for n in z.namelist():
               destino = os.path.abspath(os.path.join(raiz, n))
               if not destino.startswith(raiz + os.sep):
                   sys.exit('ERROR: ruta insegura dentro del zip: ' + n)
           z.extractall(raiz)
           print('archivos.zip descomprimido: %d archivos' % len([n for n in z.namelist() if not n.endswith('/')]))
-          for n in z.namelist():
-              print('  ', n)
           PY
 
       - name: 3c. Firma fija (para que cada APK se instale ENCIMA del anterior sin conflicto de paquete)
@@ -268,52 +256,29 @@ jobs:
           PY
 
       - name: 4. Parchear namespace y manifiesto de vosk_flutter
+        shell: bash
         run: |
-          python3 -c "
-          import os, glob
+          python3 - <<'PY'
+          import glob
 
           for manifest_path in glob.glob('/home/runner/.pub-cache/hosted/**/vosk_flutter-*/android/src/main/AndroidManifest.xml', recursive=True):
-              with open(manifest_path, 'r') as f:
+              with open(manifest_path, 'r', encoding='utf-8') as f:
                   content = f.read()
-              if 'package=\"org.vosk.vosk_flutter\"' in content:
-                  content = content.replace('package=\"org.vosk.vosk_flutter\"', '')
-                  with open(manifest_path, 'w') as f:
+              if 'package="org.vosk.vosk_flutter"' in content:
+                  content = content.replace('package="org.vosk.vosk_flutter"', '')
+                  with open(manifest_path, 'w', encoding='utf-8') as f:
                       f.write(content)
                   print(f'Eliminado package en manifiesto: {manifest_path}')
 
           for bg_path in glob.glob('/home/runner/.pub-cache/hosted/**/vosk_flutter-*/android/build.gradle', recursive=True):
-              with open(bg_path, 'r') as f:
+              with open(bg_path, 'r', encoding='utf-8') as f:
                   content = f.read()
               if 'namespace ' not in content:
-                  content = content.replace('android {', 'android {\n    namespace \"org.vosk.vosk_flutter\"\n', 1)
-                  with open(bg_path, 'w') as f:
+                  content = content.replace('android {', 'android {\n    namespace "org.vosk.vosk_flutter"\n', 1)
+                  with open(bg_path, 'w', encoding='utf-8') as f:
                       f.write(content)
                   print(f'Agregado namespace en: {bg_path}')
-          "
-
-      - name: 5. Parchear Uint8List en lib/main.dart con Python
-        run: |
-          python3 -c "
-          import os
-
-          main_path = 'lib/main.dart'
-          if os.path.exists(main_path):
-              with open(main_path, 'r', encoding='utf-8') as f:
-                  code = f.read()
-
-              code = code.replace(
-                  'Uint8List.sublistView(trozo, ini, i + 1)',
-                  'Uint8List.fromList(trozo.sublist(ini, i + 1))'
-              )
-              code = code.replace(
-                  'Uint8List.sublistView(trozo, ini, trozo.length)',
-                  'Uint8List.fromList(trozo.sublist(ini, trozo.length))'
-              )
-
-              with open(main_path, 'w', encoding='utf-8') as f:
-                  f.write(code)
-              print('Parche aplicadas correcciones de Uint8List en lib/main.dart')
-          "
+          PY
 
       - name: 5b. Limpiar cualquier referencia inválida a dbus en pubspec.yaml
         shell: bash
@@ -337,8 +302,6 @@ jobs:
       - name: 5c. Autoreparación (aplica lo pendiente del reporte del teléfono y deja todo listo para Android 16)
         shell: bash
         run: |
-          # El reporte que guarda la app en Descargas (reporte_autoreparacion.json) se usa solo si lo subes al repo,
-          # ya sea en la raíz o en scripts/ (también vale dentro de archivos.zip).
           REP=""
           for f in scripts/reporte_autoreparacion.json reporte_autoreparacion.json; do
             if [ -f "$f" ]; then REP="$f"; break; fi
@@ -349,114 +312,6 @@ jobs:
           else
             python3 scripts/autoreparar_app.py
           fi
-          # El resultado queda en reporte_autoreparar.txt (se sube como artefacto junto al APK)
-
-      - name: 5d. Corregir set duplicado y conflicto de Text en lib/main.dart con Python
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          import os, re
-
-          main_path = 'lib/main.dart'
-          if os.path.exists(main_path):
-              with open(main_path, 'r', encoding='utf-8') as f:
-                  code = f.read()
-
-              patron_set = re.compile(
-                  r'(static\s+const\s+Set<String>\s+_palabrasVacias\s*=\s*\{)(.*?)(\};)',
-                  re.DOTALL
-              )
-              def limpiar_set(match):
-                  inicio, cuerpo, fin = match.groups()
-                  items = re.findall(r"""'[^']*'|"[^"]*""", cuerpo)
-                  unicos = []
-                  for it in items:
-                      if it not in unicos:
-                          unicos.append(it)
-                  formateado = '\n      ' + ', '.join(unicos) + ',\n    '
-                  return inicio + formateado + fin
-
-              code = patron_set.sub(limpiar_set, code)
-
-              if 'import \'package:flutter/widgets.dart\' as fw;' not in code:
-                  code = "import 'package:flutter/widgets.dart' as fw;\n" + code
-
-              code = re.sub(
-                  r"(SimpleAttributionWidget\s*\(\s*source\s*:\s*)Text\(",
-                  r"\1fw.Text(",
-                  code
-              )
-
-              with open(main_path, 'w', encoding='utf-8') as f:
-                  f.write(code)
-              print('Parches aplicados en lib/main.dart')
-          PY
-
-      - name: 5e. Reparar main duplicado, void main(), LocationSettings y runApp en lib/main.dart con Python
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          import os, re
-
-          main_path = 'lib/main.dart'
-          if os.path.exists(main_path):
-              with open(main_path, 'r', encoding='utf-8') as f:
-                  code = f.read()
-
-              # 1. Si hay más de un main(), eliminar los extras a partir del segundo y dejar el primero
-              mains = list(re.finditer(r'(?m)^(?:Future<void>|void)?\s*main\s*\([^)]*\)\s*(?:async\s*)?\{', code))
-              if len(mains) > 1:
-                  extra_start = mains[1].start()
-                  code = code[:extra_start].rstrip() + '\n'
-                  print('Eliminado bloque main() duplicado en lib/main.dart')
-
-              # 2. Asegurar que exista 'void main(' (o 'Future<void> main(') para pasar validar_proyecto.py
-              if not re.search(r'(?m)^(?:Future<void>|void)\s+main\s*\(', code):
-                  if re.search(r'(?m)^\s*main\s*\(\s*\)\s*(async\s*)?\{', code):
-                      code = re.sub(r'(?m)^(\s*)main\s*\(\s*\)\s*(async\s*)?\{', r'\1void main() \2{', code, count=1)
-                  else:
-                      m_widget = re.search(
-                          r'\bclass\s+([A-Za-z_][A-Za-z0-9_]*)\s+extends\s+(?:StatefulWidget|StatelessWidget)\b',
-                          code
-                      )
-                      app_cls = m_widget.group(1) if m_widget else 'MyApp'
-                      code += (
-                          "\nvoid main() {\n"
-                          "  WidgetsFlutterBinding.ensureInitialized();\n"
-                          f"  runApp(const {app_cls}());\n"
-                          "}\n"
-                      )
-                  print('Asegurado void main() en lib/main.dart')
-
-              # 3. Quitar parámetro timeLimit: inválido de LocationSettings(...)
-              code = re.sub(
-                  r'(\bLocationSettings\s*\([^)]*?),\s*timeLimit\s*:\s*[^,)]+',
-                  r'\1',
-                  code,
-                  flags=re.DOTALL
-              )
-              code = re.sub(
-                  r'(\bLocationSettings\s*\(\s*)timeLimit\s*:\s*[^,)]+\s*,?\s*',
-                  r'\1',
-                  code,
-                  flags=re.DOTALL
-              )
-
-              # 4. Corregir runApp(const Text()) si quedó sin texto o usando widget principal
-              m_widget = re.search(
-                  r'\bclass\s+([A-Za-z_][A-Za-z0-9_]*)\s+extends\s+(?:StatefulWidget|StatelessWidget)\b',
-                  code
-              )
-              app_cls = m_widget.group(1) if m_widget else None
-              if app_cls and 'runApp(const Text())' in code:
-                  code = code.replace('runApp(const Text())', f'runApp(const {app_cls}())')
-              elif 'runApp(const Text())' in code:
-                  code = code.replace('runApp(const Text())', "runApp(const fw.Text(''))")
-
-              with open(main_path, 'w', encoding='utf-8') as f:
-                  f.write(code)
-              print('Reparaciones aplicadas en lib/main.dart')
-          PY
 
       - run: flutter pub get
 
