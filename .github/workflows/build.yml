@@ -424,21 +424,24 @@ jobs:
                   )
                   print('Agregado void main() en lib/main.dart')
 
-              # Reparar cualquier línea con locationSettings: const LocationSettings(...) que tenga paréntesis sobrantes
-              lines = code.splitlines(keepends=True)
-              fixed_lines = []
-              for line in lines:
-                  if 'locationSettings:' in line and 'LocationSettings(' in line:
-                      line = re.sub(r',\s*timeLimit\s*:\s*[^)]*', '', line)
-                      line = re.sub(r'timeLimit\s*:\s*[^,)]*,?\s*', '', line)
-                      open_p = line.count('(')
-                      close_p = line.count(')')
-                      while close_p > open_p and line.rstrip().endswith(')'):
-                          idx = line.rfind(')')
-                          line = line[:idx] + line[idx+1:]
-                          close_p -= 1
-                  fixed_lines.append(line)
-              code = ''.join(fixed_lines)
+              # Reparar llamadas a getCurrentPosition con locationSettings / LocationSettings / timeLimit
+              def reparar_get_pos(match):
+                  inner = match.group(1)
+                  acc_m = re.search(r'accuracy\s*:\s*(LocationAccuracy\.[A-Za-z0-9_]+)', inner)
+                  acc = acc_m.group(1) if acc_m else 'LocationAccuracy.low'
+                  return f'Geolocator.getCurrentPosition(desiredAccuracy: {acc})'
+
+              code = re.sub(
+                  r'Geolocator\.getCurrentPosition\s*\(.*?locationSettings\s*:\s*.*?\)+\s*',
+                  reparar_get_pos,
+                  code,
+                  flags=re.DOTALL
+              )
+              code = re.sub(
+                  r'locationSettings\s*:\s*const\s+LocationSettings\s*\(\s*accuracy\s*:\s*(LocationAccuracy\.[A-Za-z0-9_]+)(?:\s*,\s*timeLimit\s*:\s*[^)]+)?\s*\)\s*\)?',
+                  r'desiredAccuracy: \1)',
+                  code
+              )
 
               m_widget = re.search(
                   r'\bclass\s+([A-Za-z_][A-Za-z0-9_]*)\s+extends\s+(?:StatefulWidget|StatelessWidget)\b',
